@@ -1,66 +1,260 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Resposta ao "Desafio Back-end PicPay"
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+<br>
+<br>
 
-## About Laravel
+## Tecnologias utilizadas
+![Laravel](https://img.shields.io/badge/laravel-%23FF2D20.svg?style=for-the-badge&logo=laravel&logoColor=white)
+![PHP](https://img.shields.io/badge/php-%23777BB4.svg?style=for-the-badge&logo=php&logoColor=white)
+![MySQL](https://img.shields.io/badge/mysql-4479A1.svg?style=for-the-badge&logo=mysql&logoColor=white)
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+<br>
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Minhas soluções para os requisitos
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+1. Coletar informações de cadastro de usuário
+    - Validação:
+      ```php
+        try {
+            $request->validate([
+                'name'     => ['required'],
+                'email'    => ['required', 'email', 'unique:users,email'],
+                'password' => ['required', 'min:8'],
+                'document' => ['required', 'unique:users,document'],
+                'balance'  => ['required', 'numeric', 'min:0'],
+                'type'     => ['required', 'in:COMMON,MERCHANT'],
+            ], [
+                'name.required'     => 'O campo nome é obrigatório.',
+                'email.required'    => 'O campo email é obrigatório.',
+                'password.required' => 'O campo senha é obrigatório.',
+                'document.required' => 'O campo documento é obrigatório.',
+                'balance.required'  => 'O campo saldo é obrigatório.',
+                'type.required'     => 'O campo tipo é obrigatório.',
+                'email.email'       => 'O email informado não é válido.',
+                'email.unique'      => 'Usuário já cadastrado.',
+                'password.min'      => 'A senha deve ter pelo menos :min caracteres.',
+                'document.unique'   => 'Usuário já cadastrado.',
+                'balance.numeric'   => 'O saldo deve ser um número.',
+                'balance.min'       => 'O saldo não pode ser negativo.',
+                'type.in'           => 'O tipo deve ser "COMMON" ou "MERCHANT".',
+            ]);
+            ‌
+        } catch (ValidationException $e) {
+            return response()->json(['erro' => $e->validator->errors()->first()], 400);
+        }
+      ```
+    - Cadastro:
+      ```php
+        $user = new User();
+        $user->name = $request->name;
+        $user->email = $request->email;
+        $user->password = Hash::make($request->password);
+        $user->document = $request->document;
+        $user->balance = $request->balance;
+        $user->type = $request->type;
+        ‌
+        $user->save();
+        ‌
+        return response()->json(['sucesso' => 'Usuário criado com sucesso.'], 201);
+      ```
+2. Implementar funcionalidade de transferência
+   - Validação:
+     ```php
+        try {
+            $request->validate([
+                'sender'    => ['required', 'numeric', 'exists:users,id'],
+                'recipient' => ['required', 'numeric', 'exists:users,id'],
+                'amount'    => ['required', 'numeric', 'min:1'],
+            ], [
+                'sender.require'    => 'O remetente é obrigatório.',
+                'recipient.require' => 'O destinatário é obrigatório.',
+                'amount.require'    => 'O valor é obrigatório.',
+                'sender.exists'     => 'Remetente não encontrado.',
+                'recipient.exists'  => 'Destinatário não encontrado.',
+                'sender.numeric'    => 'Rementente deve ser um número',
+                'recipient.numeric' => 'Destinatário deve ser um número',
+                'amount.numeric'    => 'O valor deve ser um número.',
+                'amount.min'        => 'O valor deve ser no mínimo R$ :min.',
+            ]);
+        ‌
+        } catch (ValidationException $e) {
+            return response()->json(['erro' => $e->validator->errors()->first()], 422);
+        }
+        ‌
+        $sender = User::findOrFail($request->sender);
+        $recipient = User::findOrFail($request->recipient);
+        $amount = $request->amount;
+        ‌
+        if ($sender->type === 'MERCHANT') {
+            return response()->json(['erro' => 'MERCHANT não pode realizar transações.'], 403);
+        }
+        ‌
+        if ($sender->balance < $amount) {
+            return response()->json(['erro' => 'Saldo insuficiente.'], 403);
+        }
+     ```
+   - Processo de transação:
+     ```php
+        DB::beginTransaction();
+        try {
+            $responseAuthorization = Http::get('https://run.mocky.io/v3/5794d450-d2e2-4412-8131-73d0293ac1cc');
+            $authorization = $responseAuthorization->json();
+            ‌
+            if ((!$responseAuthorization->successful()) || ($authorization['message'] != 'Autorizado')) {
+                return response()->json(['erro' => 'Transação não autorizada.'], 403);
+            }
+            ‌
+            $sender->balance -= $amount;
+            $sender->save();
+            ‌
+            $recipient->balance += $amount;
+            $recipient->save();
+            ‌
+            Transfer::create([
+                'sender'    => $sender->id,
+                'recipient' => $recipient->id,
+                'amount'    => $amount,
+            ]);
+            ‌
+            DB::commit();
+            return response()->json(['sucesso' => 'Transação realizada com sucesso.'], 201);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json(['erro'    => 'Ocorreu um erro durante a transação.'], 500);
+        }
+     ```
+3. Verificações de envio
+   - Bloquear envio de dinheiro apenas para lojistas:
+     ```php
+        if ($sender->type === 'MERCHANT') {
+            return response()->json(['erro' => 'MERCHANT não pode realizar transações.'], 403);
+        }
+     ```
+   - Verificar saldo antes do envio de dinheiro:
+     ```php
+        if ($sender->balance < $amount) {
+            return response()->json(['erro' => 'Saldo insuficiente.'], 403);
+        }
+     ```
+4. Consultar serviço autorizador externo antes de finalizar transferência
+   - Utilizando mocky:
+     ```php
+        $responseAuthorization = Http::get('https://run.mocky.io/v3/5794d450-d2e2-4412-8131-73d0293ac1cc');
+        $authorization = $responseAuthorization->json();
+        ‌
+        if ((!$responseAuthorization->successful()) || ($authorization['message'] != 'Autorizado')) {
+            return response()->json(['erro' => 'Transação não autorizada.'], 403);
+        }
+     ```
+5. Garantir tratamento de transferência como transação reversível
+   - Tratamento de transação reversível:
+     ```php
+        DB::beginTransaction();
+        try {
+            // código da transação
+            DB::commit();
+            return response()->json(['sucesso' => 'Transação realizada com sucesso.'], 201);
+        } catch (Exception $e) {
+            DB::rollBack();
+            return response()->json(['erro'    => 'Ocorreu um erro durante a transação.'], 500);
+        }
+     ```
+6. Configurar notificações de pagamento
+   - TransferObserver (created):
+     ```php
+        $sender = User::findOrFail($transfer->sender);
+        $recipient = User::findOrFail($transfer->recipient);
+        $amount = $transfer->amount;
+        ‌
+        $responseSend = Http::get('https://run.mocky.io/v3/54dc2cf1-3add-45b5-b5a9-6bf7e7f1f4a6');
+        $sendService = $responseSend->json();
+        ‌
+        if ((!$responseSend->successful()) || ($sendService['message'] != true)) {
+            return;
+        }
+        ‌
+        Log::info('Transferência realizada com sucesso!');
+        Log::info('
+            Remetente: ' . $sender->name . ' 
+            Destinatário: ' . $recipient->name . ' 
+            Valor: $' . $amount
+        );
+     ```
+   - Utilizando mocky:
+     ```php
+     $responseSend = Http::get('https://run.mocky.io/v3/54dc2cf1-3add-45b5-b5a9-6bf7e7f1f4a6');
+     $sendService = $responseSend->json();
+        ‌
+     if ((!$responseSend->successful()) || ($sendService['message'] != true)) {
+        return;
+     }  
+     ```
+   - Simulação de envio de notificação:
+     ```php
+      Log::info('Transferência realizada com sucesso!');
+        Log::info('
+            Remetente: ' . $sender->name . ' 
+            Destinatário: ' . $recipient->name . ' 
+            Valor: $' . $amount
+        );
+     ```
+7. Assegurar disponibilidade do serviço seguindo padrão RESTful
+   - Rotas:
+     ```php
+     Route::get('/users', [UserController::class, 'index']);
+     Route::post('/users', [UserController::class, 'store']);
+     Route::post('/transfers', [TransferController::class, 'store']);
+     ```
 
-## Learning Laravel
+## Endpoints
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```sh
+GET  => api/users        #GET_ALL 
+POST => api/users        #STORE
+POST => api/transfers    #STORE
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## Exemplos de uso
+<p>Para utilizar a API, siga os seguintes passos:</p>
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### Cadastro de usuário
+<p>Envie uma solicitação <code>POST</code> para o endpoint <code>/users.</code> incluindo os detalhes do usuário a ser cadastrado no corpo da solicitação.</p>
 
-## Laravel Sponsors
+```sh
+# Exemplo de usuário
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+{
+    "name": "Maria",
+    "email": "maria@example.com",
+    "password": "98765432",
+    "document": "876.543.210-98",
+    "balance": 50.00,
+    "type": "COMMON"
+}
+```
 
-### Premium Partners
+### Consulta de usuários
+<p>Para visualizar todos os usuários cadastrados no banco de dados, faça uma solicitação <code>GET</code> para o endpoint <code>/users.</code></p>
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+```sh
+# Exemplo de retorno
 
-## Contributing
+{
+    "token": "csrf_token",
+    "users": []
+}
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### Realizando transferência
+<p>Para realizar uma transferência de fundos, envie uma solicitação <code>POST</code> para o endpoint <code>/transfers</code>, fornecendo os detalhes da transferência, como o remetente, destinatário e o valor a ser transferido.</p>
 
-## Code of Conduct
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```sh
+# Exemplo de tranferência
 
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+{
+    "sender": 1,
+    "recipient": 2,
+    "amount": 50.0
+}
+```
