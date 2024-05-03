@@ -35,13 +35,19 @@ class TransferController extends Controller
     {
         try {
             $request->validate([
-                'sender'    => ['require', 'exists:users,id'],
-                'recipient' => ['require', 'exists:users,id'],
-                'amount'    => ['require', 'numeric', 'min:1'],
+                'sender'    => ['required', 'numeric', 'exists:users,id'],
+                'recipient' => ['required', 'numeric', 'exists:users,id'],
+                'amount'    => ['required', 'numeric', 'min:1'],
             ], [
                 'sender.require'    => 'O remetente é obrigatório.',
                 'recipient.require' => 'O destinatário é obrigatório.',
                 'amount.require'    => 'O valor é obrigatório.',
+
+                'sender.exists'     => 'Remetente não encontrado.',
+                'recipient.exists'  => 'Destinatário não encontrado.',
+
+                'sender.numeric'    => 'Rementente deve ser um número',
+                'recipient.numeric' => 'Destinatário deve ser um número',
     
                 'amount.numeric'    => 'O valor deve ser um número.',
                 'amount.min'        => 'O valor deve ser no mínimo R$ :min.',
@@ -89,7 +95,9 @@ class TransferController extends Controller
 
             return response()->json(['sucesso' => 'Transação realizada com sucesso.'], 201);
         } catch (Exception $e) {
-            return response()->json(['erro' => 'Ocorreu um erro durante a transação.'], 500);
+            DB::rollBack();
+
+            return response()->json(['erro'    => 'Ocorreu um erro durante a transação.'], 500);
         }
     }
 

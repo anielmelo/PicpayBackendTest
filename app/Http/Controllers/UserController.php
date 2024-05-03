@@ -14,8 +14,11 @@ class UserController extends Controller
      */
     public function index()
     {
-        // return csrf_token();
-        return 'hello world';
+        $users = User::all();
+        return response()->json([
+            'token' => csrf_token(), 
+            'users' => $users
+        ], 200);
     }
 
     /**
